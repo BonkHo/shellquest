@@ -44,9 +44,9 @@ class Mission:
 def all_missions() -> tuple[Mission, ...]:
     """Every mission in play order. Topic modules are imported here, not at the top of the
     file, because they import Mission from this module (a top-level import would be circular)."""
-    from shellquest.missions import basics
+    from shellquest.missions import basics, finding
 
-    return (*basics.BASICS,)
+    return (*basics.BASICS, *finding.FINDING)
 
 
 def get(mission_id: str) -> Mission | None:

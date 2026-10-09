@@ -54,7 +54,7 @@ Done in the terminal, not Claude Code. See the setup commands in the chat.
 
 **Commit:** `Add mission engine and shell basics missions`
 
-## [ ] 4. Finding things
+## [x] 4. Finding things
 
 **Prompt**
 > Plan step 4 of ROADMAP.md: add the five Finding things missions from the SPEC. find-4 checks the current working directory. Reference-command tests should skip cleanly if fd, rg or fzf is missing.
