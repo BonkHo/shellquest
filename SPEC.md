@@ -34,6 +34,13 @@ Next: basics-3 · Make an index
 
 `shellquest check` must work from any folder, so the tool is installed with `uv tool install --editable .` (edits in the repo apply immediately).
 
+## Mascot
+
+Shelly the seashell is a small ASCII drawing with a speech bubble. She speaks **after** a command's normal output, never changing it:
+- when a mission is shown (`start`, `mission`, `goto`), after a correct answer, after "Not quite", and after `hint`.
+- she only says fixed phrases, so she never reveals an answer, and she saves nothing to `progress.json`.
+- on by default only when output is a terminal, so piped output stays clean. `SHELLQUEST_MASCOT=1|0` or `shellquest --mascot|--no-mascot <command>` overrides that (the flag goes before the command and beats the environment variable).
+
 ## Paths and state
 
 - Playground root: `$SHELLQUEST_HOME`, default `~/shellquest-playground`.

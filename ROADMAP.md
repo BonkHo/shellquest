@@ -98,6 +98,18 @@ Done in the terminal, not Claude Code. See the setup commands in the chat.
 
 **Commit:** `Add README and CI`, then `git tag v0.1.0 && git push --tags`
 
+## [x] 8. Seashell mascot
+
+**Prompt**
+> Plan step 8 of ROADMAP.md: add Shelly, a small seashell mascot with a speech bubble that reacts when a mission is shown, on a correct answer, on "Not quite", and on hints. Print her after the existing output, never reveal answers, hide her when piped, and let `SHELLQUEST_MASCOT=0` or `--no-mascot` turn her off.
+
+**You verify**
+- In a real terminal: `shellquest start`, a wrong `check`, `hint`, then a right `check`. Shelly reacts each time
+- `shellquest --no-mascot mission` and `shellquest mission | cat` show no shell
+- Does the art look right in your terminal font?
+
+**Commit:** `Add Shelly the seashell mascot`
+
 ---
 
 ## Later ideas
