@@ -42,7 +42,7 @@ Done in the terminal, not Claude Code. See the setup commands in the chat.
 
 **Commit:** `Build deterministic playground with start and reset`
 
-## [ ] 3. Mission engine + Shell basics
+## [x] 3. Mission engine + Shell basics
 
 **Prompt**
 > Plan step 3 of ROADMAP.md: the Mission dataclass and registry, progress.py, checks.py with the SPEC's answer checking rules, and the `mission`, `check`, `hint`, `list` and `goto` commands. Add the four Shell basics missions. Tests: test_checks.py for normalization (including macOS `wc -l` padding and piped multi-line input) and parametrized test_missions.py as described in the SPEC.
