@@ -4,6 +4,8 @@ import gzip
 import json
 import os
 import shutil
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 STATE_DIR = ".shellquest"
@@ -38,6 +40,7 @@ def build(root: Path) -> None:
     _write(root / MARKER, MARKER_TEXT)
     for rel, content in _files().items():
         _write(root / rel, content)
+    _build_kitchen_api(root / "kitchen-api")
 
 
 def reset(root: Path, *, clear_progress: bool = False) -> None:
@@ -392,3 +395,156 @@ def _archive() -> dict[str, str | bytes]:
             "Invoice 2023-12 (vault copy)", "Code word: marmalade"
         ),
     }
+
+
+@dataclass(frozen=True)
+class Commit:
+    author: str
+    email: str
+    date: str  # ISO 8601, used as both the author and the committer date
+    subject: str
+    files: dict[str, str]  # whole new contents of every file this commit changes
+
+
+SAM = ("Sam Rivera", "sam@example.com")
+ALEX = ("Alex Chen", "alex@example.com")
+
+_ROUTES_V1 = _lines(
+    "# HTTP routes for the kitchen API.",
+    "",
+    "",
+    "def list_items(pantry):",
+    "    return [{'name': name, 'qty': qty} for name, qty in pantry.items()]",
+    "",
+    "",
+    "def get_item(pantry, name):",
+    "    return {'name': name, 'qty': pantry[name]}",
+)
+_ROUTES_V2 = _lines(
+    "# HTTP routes for the kitchen API.",
+    "",
+    "",
+    "def list_items(pantry):",
+    "    if not pantry:",
+    "        return []",
+    "    return [{'name': name, 'qty': qty} for name, qty in pantry.items()]",
+    "",
+    "",
+    "def get_item(pantry, name):",
+    "    return {'name': name, 'qty': pantry[name]}",
+)
+_APP_V1 = _lines(
+    "# Entry point of the kitchen API.",
+    "",
+    "",
+    "def main():",
+    "    print('kitchen-api starting')",
+    "",
+    "",
+    "main()",
+)
+_APP_V2 = _lines(
+    "# Entry point of the kitchen API.",
+    "",
+    "from routes import list_items",
+    "",
+    "",
+    "def main():",
+    "    print('kitchen-api starting')",
+    "    print(list_items({}))",
+    "",
+    "",
+    "main()",
+)
+_APP_V3 = _lines(
+    "# Entry point of the kitchen API.",
+    "",
+    "import tomllib",
+    "",
+    "from routes import list_items",
+    "",
+    "",
+    "def load_config(path='config.toml'):",
+    "    with open(path, 'rb') as f:",
+    "        return tomllib.load(f)",
+    "",
+    "",
+    "def main():",
+    "    config = load_config()",
+    "    print('kitchen-api starting on port', config['server']['port'])",
+    "    print(list_items({}))",
+    "",
+    "",
+    "if __name__ == '__main__':",
+    "    main()",
+)
+# The timeout is deliberately the last line, so `git show HEAD` ends on the changed value.
+_CONFIG_V1 = _lines("[server]", "port = 8080", "", "[requests]", "timeout = 30")
+_CONFIG_V2 = _lines("[server]", "port = 8080", "", "[requests]", "timeout = 45")
+
+KITCHEN_API_COMMITS = (
+    Commit(*SAM, "2024-02-12T09:30:00+0000", "Initial commit", {"app.py": _APP_V1}),
+    Commit(
+        *ALEX,
+        "2024-02-15T14:05:00+0000",
+        "Add routes for pantry items",
+        {"routes.py": _ROUTES_V1, "app.py": _APP_V2},
+    ),
+    Commit(
+        *SAM, "2024-02-19T11:20:00+0000", "hotfix: handle empty pantry", {"routes.py": _ROUTES_V2}
+    ),
+    Commit(*ALEX, "2024-02-26T16:45:00+0000", "Add config file", {"config.toml": _CONFIG_V1}),
+    Commit(*SAM, "2024-03-04T10:10:00+0000", "Refactor app startup", {"app.py": _APP_V3}),
+    Commit(
+        *SAM,
+        "2024-03-06T15:00:00+0000",
+        "Raise request timeout to 45 seconds",
+        {"config.toml": _CONFIG_V2},
+    ),
+)
+# Written after the last commit and left uncommitted: git-1 asks which file it is.
+ROUTES_UNCOMMITTED = _ROUTES_V2 + "# Note: add a route for items that expire soon.\n"
+
+
+def _git(repo: Path, *args: str, commit: Commit | None = None) -> None:
+    """Run git in repo, ignoring the player's own git setup and fixing who and when."""
+    # Drop every GIT_* variable: a leaked GIT_DIR (e.g. from a git hook) would aim git elsewhere.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    # No global or system config, so signing keys, hook paths and templates can't interfere.
+    env |= {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    if commit:
+        env |= {
+            "GIT_AUTHOR_NAME": commit.author,
+            "GIT_AUTHOR_EMAIL": commit.email,
+            "GIT_AUTHOR_DATE": commit.date,
+            "GIT_COMMITTER_NAME": commit.author,
+            "GIT_COMMITTER_EMAIL": commit.email,
+            "GIT_COMMITTER_DATE": commit.date,
+        }
+    try:
+        # commit.gpgsign=false so the builder never asks for a signing key.
+        subprocess.run(
+            ["git", "-c", "commit.gpgsign=false", *args],
+            cwd=repo,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        raise PlaygroundError("kitchen-api needs git, but git is not installed.") from None
+    except subprocess.CalledProcessError as err:
+        raise PlaygroundError(f"kitchen-api: `git {args[0]}` failed: {err.stderr.strip()}") from err
+
+
+def _build_kitchen_api(repo: Path) -> None:
+    """Create the kitchen-api repo: six fixed commits, then one uncommitted change."""
+    repo.mkdir(parents=True, exist_ok=True)
+    # An empty template means no sample hooks, so the repo holds only what we put in it.
+    _git(repo, "init", "--quiet", "--initial-branch=main", "--template=")
+    for commit in KITCHEN_API_COMMITS:
+        for name, content in commit.files.items():
+            _write(repo / name, content)
+        _git(repo, "add", "--all")
+        _git(repo, "commit", "--quiet", "-m", commit.subject, commit=commit)
+    _write(repo / "routes.py", ROUTES_UNCOMMITTED)

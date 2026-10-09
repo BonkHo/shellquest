@@ -143,7 +143,8 @@ def check(
         console.print("Try again, or run `shellquest hint`.", markup=False)
         raise typer.Exit(1)
 
-    shown = f": {checks.last_line(given).strip()}" if current.kind == "answer" else ""
+    echoed = checks.last_line(given).strip() if result.shown is None else result.shown
+    shown = f": {echoed}" if current.kind == "answer" else ""
     console.print(f"✓ Correct{shown}", style="green", markup=False, soft_wrap=True)
     console.print(f"  Another way:  {current.solution}", markup=False, soft_wrap=True)
     console.print(f"  Why it works: {current.explain}", markup=False)

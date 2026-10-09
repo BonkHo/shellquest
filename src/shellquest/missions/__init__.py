@@ -20,6 +20,8 @@ class CheckResult:
     ok: bool
     # An optional nudge on failure. Never put the answer in it.
     note: str = ""
+    # What to echo after "✓ Correct:" when it isn't the input's last line (e.g. git-2's Sam line).
+    shown: str | None = None
 
 
 @dataclass(frozen=True)
@@ -44,9 +46,9 @@ class Mission:
 def all_missions() -> tuple[Mission, ...]:
     """Every mission in play order. Topic modules are imported here, not at the top of the
     file, because they import Mission from this module (a top-level import would be circular)."""
-    from shellquest.missions import basics, finding, reading
+    from shellquest.missions import basics, finding, git, reading
 
-    return (*basics.BASICS, *finding.FINDING, *reading.READING)
+    return (*basics.BASICS, *finding.FINDING, *reading.READING, *git.GIT)
 
 
 def get(mission_id: str) -> Mission | None:
