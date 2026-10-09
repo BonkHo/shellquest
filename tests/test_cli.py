@@ -222,11 +222,27 @@ def test_last_mission_says_everything_is_done(
         ("find-3", "6"),
         ("find-4", ""),
         ("find-5", "marmalade"),
+        ("read-1", "312"),
+        ("read-2", "scale_recipe"),
+        ("read-3", "photos.bin"),
+        ("read-4", "5"),
+        ("read-5", "187.5"),
     ]:
         run("goto", mission_id)
         assert run("check", answer).exit_code == 0
 
-    assert "finished every mission" in run("check", "marmalade").output
+    assert "finished every mission" in run("check", "187.5").output
+
+
+def test_a_whole_pasted_log_line_is_accepted(playground: Path) -> None:
+    run("goto", "read-1")
+
+    result = run(
+        "check", input="2024-03-07 18:00:00 INFO shutdown complete: 312 orders processed\n"
+    )
+
+    assert result.exit_code == 0
+    assert "✓ Correct" in result.output
 
 
 def test_find_4_checks_the_real_working_directory(
