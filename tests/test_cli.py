@@ -1,5 +1,6 @@
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -203,8 +204,12 @@ def test_state_mission_does_not_read_stdin(playground: Path) -> None:
 
 
 def test_last_mission_says_everything_is_done(
-    playground: Path, monkeypatch: pytest.MonkeyPatch
+    playground: Path, monkeypatch: pytest.MonkeyPatch, run_git: Callable[..., str]
 ) -> None:
+    run_git(playground, "switch", "-c", "add-greeting")
+    (playground / "kitchen-api" / "greeting.txt").write_text("hello\n")
+    run_git(playground, "add", "greeting.txt")
+    run_git(playground, "commit", "-m", "Add greeting")
     (playground / "notes" / "index.txt").write_text(
         "\n".join(
             ["groceries.md", "ideas.md", "meeting-2024-03.md", "recipes-to-try.md", "test-plan.md"]
@@ -227,11 +232,15 @@ def test_last_mission_says_everything_is_done(
         ("read-3", "photos.bin"),
         ("read-4", "5"),
         ("read-5", "187.5"),
+        ("git-1", " M routes.py"),
+        ("git-2", "4"),
+        ("git-3", "45"),
+        ("git-4", ""),
     ]:
         run("goto", mission_id)
         assert run("check", answer).exit_code == 0
 
-    assert "finished every mission" in run("check", "187.5").output
+    assert "finished every mission" in run("check", "45").output
 
 
 def test_a_whole_pasted_log_line_is_accepted(playground: Path) -> None:
@@ -317,3 +326,13 @@ def test_corrupt_progress_is_reported(playground: Path) -> None:
 
     assert result.exit_code == 1
     assert "reset --progress" in result.output
+
+
+def test_shortlog_success_echoes_sams_line_not_the_last_line(playground: Path) -> None:
+    run("goto", "git-2")
+
+    result = run("check", input="     4\tSam Rivera\n     2\tAlex Chen\n")
+
+    assert result.exit_code == 0
+    assert "✓ Correct: 4 Sam Rivera" in result.output
+    assert "Alex" not in result.output

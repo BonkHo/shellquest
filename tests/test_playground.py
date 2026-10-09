@@ -6,6 +6,7 @@ so a mistake in the builder can't silently agree with itself.
 
 import gzip
 import json
+import os
 import re
 import stat
 import subprocess
@@ -17,7 +18,9 @@ from shellquest.playground import PlaygroundError, build, reset
 
 
 def _files(root: Path) -> list[Path]:
-    return [p for p in root.rglob("*") if p.is_file()]
+    # .git/ is skipped: its index stores file timestamps, so it differs between identical builds.
+    # The repo's content is checked through git itself (see the kitchen-api section).
+    return [p for p in root.rglob("*") if p.is_file() and ".git" not in p.relative_to(root).parts]
 
 
 def _snapshot(root: Path) -> dict[str, tuple[bytes, int]]:
@@ -249,3 +252,142 @@ def test_reset_does_not_follow_symlinks(playground: Path, tmp_path: Path) -> Non
     reset(playground)
     assert not (playground / "link").exists()
     assert (outside / "precious.txt").read_text() == "keep me"
+
+
+# --- kitchen-api git repo ---
+
+COMMITS = [  # oldest first: (author, subject, date)
+    ("Sam Rivera", "Initial commit", "2024-02-12T09:30:00Z"),
+    ("Alex Chen", "Add routes for pantry items", "2024-02-15T14:05:00Z"),
+    ("Sam Rivera", "hotfix: handle empty pantry", "2024-02-19T11:20:00Z"),
+    ("Alex Chen", "Add config file", "2024-02-26T16:45:00Z"),
+    ("Sam Rivera", "Refactor app startup", "2024-03-04T10:10:00Z"),
+    ("Sam Rivera", "Raise request timeout to 45 seconds", "2024-03-06T15:00:00Z"),
+]
+
+
+def _git_out(repo: Path, *args: str) -> str:
+    """Run a read-only git command in a built repo, ignoring the developer's git config."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env |= {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    done = subprocess.run(
+        ["git", *args], cwd=repo, env=env, capture_output=True, text=True, check=True
+    )
+    return done.stdout
+
+
+@pytest.fixture
+def repo(playground: Path) -> Path:
+    return playground / "kitchen-api"
+
+
+def test_kitchen_api_is_a_repo_on_main(repo: Path) -> None:
+    assert _git_out(repo, "rev-parse", "--show-toplevel").strip() == str(repo.resolve())
+    assert _git_out(repo, "branch", "--show-current").strip() == "main"
+    assert _git_out(repo, "branch", "--format=%(refname:short)").split() == ["main"]
+    assert _git_out(repo, "stash", "list") == ""
+
+
+def test_kitchen_api_files(repo: Path) -> None:
+    tracked = sorted(_git_out(repo, "ls-files").split())
+    assert tracked == ["app.py", "config.toml", "routes.py"]
+
+
+def test_kitchen_api_has_six_commits_in_order(repo: Path) -> None:
+    log = _git_out(repo, "log", "--reverse", "--format=%an|%s|%aI").splitlines()
+    assert [tuple(line.split("|")) for line in log] == COMMITS
+
+
+def test_kitchen_api_authors_use_example_emails(repo: Path) -> None:
+    emails = _git_out(repo, "log", "--format=%ae|%ce").split()
+    assert len(emails) == 6
+    assert all(pair.split("|")[0].endswith("@example.com") for pair in emails)
+
+
+def test_kitchen_api_committer_matches_author(repo: Path) -> None:
+    fields = _git_out(repo, "log", "--format=%an|%ae|%aI|%cn|%ce|%cI").splitlines()
+    for line in fields:
+        name, email, date, c_name, c_email, c_date = line.split("|")
+        assert (name, email, date) == (c_name, c_email, c_date)
+
+
+def test_kitchen_api_commits_are_unsigned(repo: Path) -> None:
+    assert set(_git_out(repo, "log", "--format=%G?").split()) == {"N"}
+
+
+def test_sam_made_four_commits_and_alex_two(repo: Path) -> None:
+    names = _git_out(repo, "log", "--format=%an").splitlines()
+    assert (names.count("Sam Rivera"), names.count("Alex Chen")) == (4, 2)
+
+
+def test_last_commit_raises_the_timeout(repo: Path) -> None:
+    assert _git_out(repo, "show", "--name-only", "--format=", "HEAD").split() == ["config.toml"]
+    diff = _git_out(repo, "show", "--format=", "-U0", "HEAD").splitlines()
+    assert [line for line in diff if line[0] in "+-" and line[:3] not in ("+++", "---")] == [
+        "-timeout = 30",
+        "+timeout = 45",
+    ]
+    assert (repo / "config.toml").read_text().splitlines()[-1] == "timeout = 45"
+
+
+def test_only_routes_has_an_uncommitted_change(repo: Path) -> None:
+    assert _git_out(repo, "status", "--porcelain") == " M routes.py\n"
+
+
+def test_kitchen_api_has_no_distractor_strings(repo: Path) -> None:
+    # Other missions search the whole playground, so the repo must not add accidental matches.
+    text = "".join(p.read_text() for p in _files(repo))
+    assert "TODO" not in text
+    assert "FIXME" not in text
+
+
+def test_kitchen_api_head_is_deterministic(tmp_path: Path) -> None:
+    build(tmp_path / "a")
+    build(tmp_path / "b")
+    head = [_git_out(tmp_path / x / "kitchen-api", "rev-parse", "HEAD") for x in "ab"]
+    assert head[0] == head[1]
+
+
+def test_build_ignores_the_developers_git_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    build(tmp_path / "clean")
+    # A hostile setup: signing on with a missing key, a hook that always fails, and a stray
+    # GIT_DIR like the one git sets while running a hook.
+    home = tmp_path / "home"
+    hooks = home / "hooks"
+    hooks.mkdir(parents=True)
+    hook = hooks / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+    (home / ".gitconfig").write_text(
+        f"[commit]\n\tgpgsign = true\n[gpg]\n\tformat = ssh\n"
+        f"[user]\n\tsigningkey = {home}/missing-key.pub\n[core]\n\thooksPath = {hooks}\n"
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "somewhere-else"))
+
+    build(tmp_path / "hostile")
+
+    heads = [
+        _git_out(tmp_path / x / "kitchen-api", "rev-parse", "HEAD") for x in ("clean", "hostile")
+    ]
+    assert heads[0] == heads[1]
+
+
+def test_reset_rebuilds_the_repo(playground: Path, repo: Path) -> None:
+    head = _git_out(repo, "rev-parse", "HEAD")
+    _git_out(repo, "switch", "-c", "scratch")
+    (repo / "extra.txt").write_text("x")
+    _git_out(repo, "add", "extra.txt")
+    _git_out(
+        repo,
+        "-c", "user.name=T", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false",
+        "commit", "-m", "extra",
+    )  # fmt: skip
+
+    reset(playground)
+
+    assert _git_out(repo, "rev-parse", "HEAD") == head
+    assert _git_out(repo, "branch", "--format=%(refname:short)").split() == ["main"]
+    assert _git_out(repo, "status", "--porcelain") == " M routes.py\n"

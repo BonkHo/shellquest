@@ -75,7 +75,7 @@ Done in the terminal, not Claude Code. See the setup commands in the chat.
 
 **Commit:** `Add reading files and data missions (tail, bat, eza, jq)`
 
-## [ ] 6. Git missions
+## [x] 6. Git missions
 
 **Prompt**
 > Plan step 6 of ROADMAP.md: extend the playground builder with the kitchen-api git repo exactly as the SPEC describes (fixed authors and dates, commit.gpgsign=false, uncommitted change at the end), add its facts to test_playground.py, then add the four Git missions with tests.

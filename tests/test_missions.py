@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -304,6 +305,163 @@ class TestRead5:
         assert not check(mission_by_id("read-5"), playground, output).ok
 
 
+SHORTLOG = "     4\tSam Rivera\n     2\tAlex Chen\n"
+STATUS_LONG = """On branch main
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+\tmodified:   routes.py
+
+no changes added to commit (use "git add" and/or "git commit -a")
+"""
+
+
+class TestGit1:
+    @pytest.mark.parametrize(
+        "answer", [" M routes.py", "routes.py", "kitchen-api/routes.py", STATUS_LONG]
+    )
+    def test_accepts_short_status_a_name_or_long_status(
+        self, playground: Path, answer: str
+    ) -> None:
+        assert check(mission_by_id("git-1"), playground, answer).ok
+
+    @pytest.mark.parametrize("answer", [" M app.py", "app.py", "config.toml"])
+    def test_other_files_fail(self, playground: Path, answer: str) -> None:
+        assert not check(mission_by_id("git-1"), playground, answer).ok
+
+    def test_long_status_naming_another_file_fails(self, playground: Path) -> None:
+        assert not check(
+            mission_by_id("git-1"), playground, STATUS_LONG.replace("routes.py", "app.py")
+        ).ok
+
+
+class TestGit2:
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            SHORTLOG,
+            "     4\tSam Rivera <sam@example.com>\n",
+            "4",
+            "     4\n",
+            "2\tAlex Chen\n4\tSam Rivera",
+        ],
+    )
+    def test_accepts_the_shortlog_or_a_bare_count(self, playground: Path, answer: str) -> None:
+        assert check(mission_by_id("git-2"), playground, answer).ok
+
+    @pytest.mark.parametrize("answer", ["     2\tAlex Chen\n", "     3\tSam Rivera\n", "6", "2"])
+    def test_wrong_counts_fail(self, playground: Path, answer: str) -> None:
+        assert not check(mission_by_id("git-2"), playground, answer).ok
+
+
+class TestGit3:
+    @pytest.mark.parametrize(
+        "answer",
+        ["45", "+timeout = 45", "timeout = 45", "    Raise request timeout to 45 seconds"],
+    )
+    def test_accepts_the_value_or_the_line_showing_it(self, playground: Path, answer: str) -> None:
+        assert check(mission_by_id("git-3"), playground, answer).ok
+
+    @pytest.mark.parametrize(
+        "answer", ["30", "+timeout = 30", "-timeout = 30", "    Add config file"]
+    )
+    def test_the_old_value_fails(self, playground: Path, answer: str) -> None:
+        assert not check(mission_by_id("git-3"), playground, answer).ok
+
+    def test_the_previous_commit_ends_on_the_old_value(
+        self, playground: Path, run_git: Callable[..., str]
+    ) -> None:
+        needs("git")
+        output = run_git(playground, "show", "HEAD~1")
+
+        assert not check(mission_by_id("git-3"), playground, output).ok
+
+
+class TestGit4:
+    def commit_file(
+        self, root: Path, run_git: Callable[..., str], name: str = "greeting.txt"
+    ) -> None:
+        (root / "kitchen-api" / name).write_text("hello\n")
+        run_git(root, "add", name)
+        run_git(root, "commit", "-m", f"Add {name}")
+
+    def result(self, root: Path) -> CheckResult:
+        return check(mission_by_id("git-4"), root)
+
+    def test_branch_with_the_file_committed(
+        self, playground: Path, run_git: Callable[..., str]
+    ) -> None:
+        needs("git")
+        run_git(playground, "switch", "-c", "add-greeting")
+        self.commit_file(playground, run_git)
+
+        assert self.result(playground).ok
+
+    def test_still_passes_after_switching_back_to_main(
+        self, playground: Path, run_git: Callable[..., str]
+    ) -> None:
+        needs("git")
+        run_git(playground, "switch", "-c", "add-greeting")
+        self.commit_file(playground, run_git)
+        run_git(playground, "switch", "main")
+
+        assert self.result(playground).ok
+
+    def test_no_branch_yet(self, playground: Path) -> None:
+        needs("git")
+        result = self.result(playground)
+
+        assert not result.ok
+        assert "no branch" in result.note
+
+    def test_wrong_branch_name(self, playground: Path, run_git: Callable[..., str]) -> None:
+        needs("git")
+        run_git(playground, "switch", "-c", "greeting")
+        self.commit_file(playground, run_git)
+
+        assert not self.result(playground).ok
+
+    def test_branch_without_new_commits(
+        self, playground: Path, run_git: Callable[..., str]
+    ) -> None:
+        needs("git")
+        run_git(playground, "switch", "-c", "add-greeting")
+
+        result = self.result(playground)
+
+        assert not result.ok
+        assert "no commit" in result.note
+
+    def test_commit_without_the_file(self, playground: Path, run_git: Callable[..., str]) -> None:
+        needs("git")
+        run_git(playground, "switch", "-c", "add-greeting")
+        self.commit_file(playground, run_git, name="hello.txt")
+
+        result = self.result(playground)
+
+        assert not result.ok
+        assert "greeting.txt" in result.note
+
+    @pytest.mark.parametrize("stage", [False, True])
+    def test_file_not_committed(
+        self, playground: Path, run_git: Callable[..., str], stage: bool
+    ) -> None:
+        needs("git")
+        run_git(playground, "switch", "-c", "add-greeting")
+        (playground / "kitchen-api" / "greeting.txt").write_text("hello\n")
+        if stage:
+            run_git(playground, "add", "greeting.txt")
+
+        assert not self.result(playground).ok
+
+    def test_committed_on_main_instead(self, playground: Path, run_git: Callable[..., str]) -> None:
+        needs("git")
+        self.commit_file(playground, run_git)
+        run_git(playground, "branch", "add-greeting")
+
+        assert not self.result(playground).ok  # the branch exists but isn't ahead of main
+
+
 def next_id(mission_id: str, completed: list[str]) -> str | None:
     following = missions.next_after(mission_id, completed)
     return following.id if following else None
@@ -314,7 +472,7 @@ class TestOrdering:
         assert next_id("basics-1", ["basics-1", "basics-2"]) == "basics-3"
 
     def test_next_after_wraps_to_earlier_missions(self) -> None:
-        assert next_id("read-5", ["read-5", "basics-2"]) == "basics-1"
+        assert next_id("git-4", ["git-4", "basics-2"]) == "basics-1"
 
     def test_next_after_is_none_when_everything_is_done(self) -> None:
         assert next_id("basics-1", IDS) is None
