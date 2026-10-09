@@ -1,0 +1,35 @@
+[project]
+name = "shellquest"
+version = "0.1.0"
+description = "Terminal missions that teach the command line"
+readme = "README.md"
+authors = [
+    { name = "John Bae", email = "36432385+BonkHo@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "rich>=15.0.0",
+    "typer>=0.27.3",
+]
+
+[project.scripts]
+shellquest = "shellquest.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.24,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
