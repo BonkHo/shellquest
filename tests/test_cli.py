@@ -202,23 +202,43 @@ def test_state_mission_does_not_read_stdin(playground: Path) -> None:
     assert run("check", input="garbage").exit_code == 0
 
 
-def test_last_mission_says_everything_is_done(playground: Path) -> None:
+def test_last_mission_says_everything_is_done(
+    playground: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     (playground / "notes" / "index.txt").write_text(
         "\n".join(
             ["groceries.md", "ideas.md", "meeting-2024-03.md", "recipes-to-try.md", "test-plan.md"]
         )
     )
     (playground / "scripts" / "backup.sh").chmod(0o755)
+    monkeypatch.chdir(playground / "archive" / "2023" / "q4" / "invoices")
     for mission_id, answer in [
         ("basics-1", "saffron"),
         ("basics-2", "7"),
         ("basics-3", ""),
         ("basics-4", "BACKUP-OK-7731"),
+        ("find-1", "4"),
+        ("find-2", "sync.py"),
+        ("find-3", "6"),
+        ("find-4", ""),
+        ("find-5", "marmalade"),
     ]:
         run("goto", mission_id)
         assert run("check", answer).exit_code == 0
 
-    assert "finished every mission" in run("check", "BACKUP-OK-7731").output
+    assert "finished every mission" in run("check", "marmalade").output
+
+
+def test_find_4_checks_the_real_working_directory(
+    playground: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run("goto", "find-4")
+
+    monkeypatch.chdir(playground)
+    assert run("check").exit_code == 1
+
+    monkeypatch.chdir(playground / "archive" / "2023" / "q4" / "invoices")
+    assert run("check").exit_code == 0
 
 
 def test_hints_are_revealed_one_at_a_time(playground: Path) -> None:

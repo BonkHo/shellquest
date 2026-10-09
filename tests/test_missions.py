@@ -11,6 +11,9 @@ from shellquest.missions import CheckResult, Context, Mission
 ALL = missions.all_missions()
 IDS = [m.id for m in ALL]
 
+# Missions whose reference can't run in `sh -c`; each has its own test class instead.
+NOT_RUNNABLE = {"find-4": "needs an interactive shell with zoxide"}
+
 
 def run_shell(script: str, cwd: Path, home: Path) -> str:
     """Run a script the way a player would in the playground; return its stdout."""
@@ -47,6 +50,8 @@ def test_mission_is_complete(mission: Mission) -> None:
 
 @pytest.mark.parametrize("mission", ALL, ids=IDS)
 def test_reference_solution_passes(mission: Mission, playground: Path, tmp_path: Path) -> None:
+    if mission.id in NOT_RUNNABLE:
+        pytest.skip(NOT_RUNNABLE[mission.id])
     for tool in mission.tools:
         if shutil.which(tool) is None:
             pytest.skip(f"{tool} is not installed")
@@ -133,6 +138,76 @@ class TestBasics4:
         assert "reset" in result.note
 
 
+def needs(tool: str) -> None:
+    if shutil.which(tool) is None:
+        pytest.skip(f"{tool} is not installed")
+
+
+class TestFind1:
+    def test_unanchored_fd_gives_the_wrong_count(self, playground: Path, tmp_path: Path) -> None:
+        needs("fd")
+        output = run_shell("fd test | wc -l", playground, tmp_path)
+
+        assert not check(mission_by_id("find-1"), playground, output).ok
+
+
+class TestFind2:
+    def test_path_is_accepted(self, playground: Path) -> None:
+        assert check(mission_by_id("find-2"), playground, "src/pantry/sync.py").ok
+
+    def test_distractor_file_is_not(self, playground: Path) -> None:
+        assert not check(mission_by_id("find-2"), playground, "src/pantry/contest.py").ok
+
+
+class TestFind3:
+    def test_counting_the_whole_playground_is_wrong(self, playground: Path, tmp_path: Path) -> None:
+        needs("rg")
+        output = run_shell("rg TODO | wc -l", playground, tmp_path)  # also counts TODO.md
+
+        assert not check(mission_by_id("find-3"), playground, output).ok
+
+
+class TestFind5:
+    @pytest.mark.parametrize("answer", ["marmalade", "Code word: marmalade", "'Marmalade'\n"])
+    def test_accepts_the_word_or_the_whole_line(self, playground: Path, answer: str) -> None:
+        assert check(mission_by_id("find-5"), playground, answer).ok
+
+    def test_rejects_other_words(self, playground: Path) -> None:
+        assert not check(mission_by_id("find-5"), playground, "Code word: saffron").ok
+
+
+class TestFind4:
+    INVOICES = Path("archive/2023/q4/invoices")
+
+    def at(self, root: Path, cwd: Path) -> CheckResult:
+        return mission_by_id("find-4").check(Context(root=root, cwd=cwd), "")
+
+    def test_in_the_invoices_folder(self, playground: Path) -> None:
+        assert self.at(playground, playground / self.INVOICES).ok
+
+    @pytest.mark.parametrize(
+        "elsewhere",
+        [Path(), Path("archive/2023/q4"), Path("src"), Path("archive/2023/q4/invoices/..")],
+    )
+    def test_anywhere_else_fails(self, playground: Path, elsewhere: Path) -> None:
+        result = self.at(playground, playground / elsewhere)
+
+        assert not result.ok
+        assert "archive" not in result.note  # a nudge, not the path
+
+    def test_a_subfolder_of_invoices_fails(self, playground: Path) -> None:
+        deeper = playground / self.INVOICES / "deeper"
+        deeper.mkdir()
+
+        assert not self.at(playground, deeper).ok
+
+    def test_reached_through_a_symlink(self, playground: Path, tmp_path: Path) -> None:
+        link = tmp_path / "shortcut"
+        link.symlink_to(playground / self.INVOICES)
+
+        assert self.at(playground, link).ok
+
+
 def next_id(mission_id: str, completed: list[str]) -> str | None:
     following = missions.next_after(mission_id, completed)
     return following.id if following else None
@@ -143,7 +218,7 @@ class TestOrdering:
         assert next_id("basics-1", ["basics-1", "basics-2"]) == "basics-3"
 
     def test_next_after_wraps_to_earlier_missions(self) -> None:
-        assert next_id("basics-4", ["basics-4", "basics-2"]) == "basics-1"
+        assert next_id("find-5", ["find-5", "basics-2"]) == "basics-1"
 
     def test_next_after_is_none_when_everything_is_done(self) -> None:
         assert next_id("basics-1", IDS) is None
