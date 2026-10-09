@@ -208,6 +208,102 @@ class TestFind4:
         assert self.at(playground, link).ok
 
 
+class TestRead1:
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            "312",
+            "  312\n",
+            "'312'",
+            "2024-03-07 18:00:00 INFO shutdown complete: 312 orders processed",
+        ],
+    )
+    def test_accepts_the_number_or_the_whole_line(self, playground: Path, answer: str) -> None:
+        assert check(mission_by_id("read-1"), playground, answer).ok
+
+    @pytest.mark.parametrize("day", [1, 6])
+    def test_another_days_last_line_fails(self, playground: Path, day: int) -> None:
+        log = (playground / "logs" / f"app-0{day}.log").read_text()
+
+        assert not check(mission_by_id("read-1"), playground, log).ok
+
+    def test_the_date_in_the_line_is_not_the_answer(self, playground: Path) -> None:
+        line = "2024-03-07 18:00:00 INFO shutdown complete: 12 orders processed"
+
+        assert not check(mission_by_id("read-1"), playground, line).ok
+
+
+class TestRead2:
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            "scale_recipe",
+            "def scale_recipe(recipe, servings):",
+            "  42 │ def scale_recipe(recipe, servings):",
+        ],
+    )
+    def test_accepts_the_name_or_the_whole_line(self, playground: Path, answer: str) -> None:
+        assert check(mission_by_id("read-2"), playground, answer).ok
+
+    def test_another_function_in_the_file_fails(self, playground: Path) -> None:
+        lines = (playground / "src" / "pantry" / "recipes.py").read_text().splitlines()
+        other = next(
+            line for line in lines if line.startswith("def ") and "scale_recipe" not in line
+        )
+
+        assert not check(mission_by_id("read-2"), playground, other).ok
+
+
+class TestRead3:
+    SIZES = {"photos.bin": "2.0Mi", "orders.json": "3.9k", "inventory.csv": "2.1k"}
+
+    def row(self, name: str) -> str:
+        return f".rw-r--r--  {self.SIZES[name]} me  9 Oct 07:11 {name}"
+
+    @pytest.mark.parametrize("answer", ["photos.bin", "data/photos.bin"])
+    def test_accepts_the_name_or_a_path(self, playground: Path, answer: str) -> None:
+        assert check(mission_by_id("read-3"), playground, answer).ok
+
+    def test_accepts_the_last_row_of_a_long_listing(self, playground: Path) -> None:
+        assert check(mission_by_id("read-3"), playground, self.row("photos.bin")).ok
+
+    @pytest.mark.parametrize("name", ["orders.json", "inventory.csv"])
+    def test_other_files_fail(self, playground: Path, name: str) -> None:
+        assert not check(mission_by_id("read-3"), playground, self.row(name)).ok
+
+    def test_reversed_listing_ends_on_the_smallest_file(
+        self, playground: Path, tmp_path: Path
+    ) -> None:
+        # Known limitation: the check reads the last line, so `--reverse` must be typed instead.
+        needs("eza")
+        output = run_shell("eza -l --sort=size --reverse data", playground, tmp_path)
+
+        assert not check(mission_by_id("read-3"), playground, output).ok
+
+
+class TestRead4:
+    def test_counting_every_order_is_wrong(self, playground: Path, tmp_path: Path) -> None:
+        needs("jq")
+        output = run_shell("jq length data/orders.json", playground, tmp_path)  # 40 orders
+
+        assert not check(mission_by_id("read-4"), playground, output).ok
+
+
+class TestRead5:
+    @pytest.mark.parametrize("answer", ["187.5", "187.50", "$187.50", "'187.5'\n"])
+    def test_accepts_the_total_in_any_format(self, playground: Path, answer: str) -> None:
+        assert check(mission_by_id("read-5"), playground, answer).ok
+
+    def test_the_count_is_not_the_total(self, playground: Path) -> None:
+        assert not check(mission_by_id("read-5"), playground, "5").ok
+
+    def test_summing_every_order_is_wrong(self, playground: Path, tmp_path: Path) -> None:
+        needs("jq")
+        output = run_shell("jq '[.[] | .amount] | add' data/orders.json", playground, tmp_path)
+
+        assert not check(mission_by_id("read-5"), playground, output).ok
+
+
 def next_id(mission_id: str, completed: list[str]) -> str | None:
     following = missions.next_after(mission_id, completed)
     return following.id if following else None
@@ -218,7 +314,7 @@ class TestOrdering:
         assert next_id("basics-1", ["basics-1", "basics-2"]) == "basics-3"
 
     def test_next_after_wraps_to_earlier_missions(self) -> None:
-        assert next_id("find-5", ["find-5", "basics-2"]) == "basics-1"
+        assert next_id("read-5", ["read-5", "basics-2"]) == "basics-1"
 
     def test_next_after_is_none_when_everything_is_done(self) -> None:
         assert next_id("basics-1", IDS) is None

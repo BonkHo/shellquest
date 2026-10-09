@@ -65,7 +65,7 @@ Done in the terminal, not Claude Code. See the setup commands in the chat.
 
 **Commit:** `Add finding things missions (fd, rg, zoxide, fzf)`
 
-## [ ] 5. Reading files and data
+## [x] 5. Reading files and data
 
 **Prompt**
 > Plan step 5 of ROADMAP.md: add the five Reading files and data missions from the SPEC, with tests.
