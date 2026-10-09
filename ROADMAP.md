@@ -30,7 +30,7 @@ Done in the terminal, not Claude Code. See the setup commands in the chat.
 
 **Commit:** `Set up uv project, Typer CLI skeleton and tests`
 
-## [ ] 2. Playground builder
+## [x] 2. Playground builder
 
 **Prompt**
 > Plan step 2 of ROADMAP.md: implement playground.py to build everything in the SPEC's "Playground contents" section except kitchen-api/ (that comes in step 6). Wire up `start` and `reset`, including the marker-file safety rule. Write test_playground.py asserting every fixture fact. Explain any shell or Python concept I might not know in one line.
