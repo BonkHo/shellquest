@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from shellquest import checks, missions, playground, progress
+from shellquest import checks, mascot, missions, playground, progress
 from shellquest.missions import Context, Mission
 
 app = typer.Typer(
@@ -18,6 +18,23 @@ app = typer.Typer(
     help="Terminal missions that teach the command line.",
 )
 console = Console()
+# Set by the callback below on every run: True/False when the player chose, None for "automatic".
+_mascot_setting: bool | None = None
+
+
+@app.callback()
+def main(
+    mascot_on: Annotated[
+        bool | None,
+        typer.Option(
+            "--mascot/--no-mascot",
+            envvar="SHELLQUEST_MASCOT",
+            help="Show or hide Shelly the seashell. Default: only in a terminal, not when piped.",
+        ),
+    ] = None,
+) -> None:
+    global _mascot_setting
+    _mascot_setting = mascot_on
 
 
 def _display(path: Path) -> str:
@@ -62,6 +79,12 @@ def _current(saved: progress.Progress) -> Mission:
     )
 
 
+def _say(mood: mascot.Mood, key: str) -> None:
+    """Shelly always speaks last, after the lines the spec pins down, and never says an answer."""
+    if mascot.is_enabled(_mascot_setting, console):
+        mascot.say(console, mood, key)
+
+
 def _show_mission(mission: Mission) -> None:
     in_topic = missions.in_topic(mission)
     header = Table.grid(expand=True)
@@ -79,6 +102,7 @@ def _show_mission(mission: Mission) -> None:
     else:
         how = "shellquest check"
     console.print(f"Check with:  {how}", markup=False, soft_wrap=True)
+    _say("hello", mission.id)
 
 
 def _stdin_is_tty() -> bool:
@@ -141,6 +165,7 @@ def check(
         if result.note:
             console.print(result.note, markup=False)
         console.print("Try again, or run `shellquest hint`.", markup=False)
+        _say("oops", f"{current.id}:{saved.hints_used.get(current.id, 0)}")
         raise typer.Exit(1)
 
     echoed = checks.last_line(given).strip() if result.shown is None else result.shown
@@ -156,8 +181,10 @@ def check(
     progress.save(root, saved)
     if following:
         console.print(f"Next: {following.id} · {following.title}", markup=False)
+        _say("cheer", current.id)
     else:
         console.print("You've finished every mission available so far.", markup=False)
+        _say("done", current.id)
 
 
 @app.command()
@@ -174,6 +201,7 @@ def hint() -> None:
     console.print(f"Hint {used}/{len(current.hints)}: {current.hints[used - 1]}", markup=False)
     if out_of_hints:
         console.print("That's all the hints for this mission.", style="dim", markup=False)
+    _say("hint", f"{current.id}:{used}")
 
 
 @app.command("list")
