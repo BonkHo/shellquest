@@ -86,7 +86,7 @@ Done in the terminal, not Claude Code. See the setup commands in the chat.
 
 **Commit:** `Add kitchen-api repo and git missions`
 
-## [ ] 7. Polish and release
+## [x] 7. Polish and release
 
 **Prompt**
 > Plan step 7 of ROADMAP.md: write a README (what it is, install with `uv tool install`, a short demo transcript, mission list without answers), add a GitHub Actions workflow on macos-latest that installs fd, ripgrep, jq, bat and eza with Homebrew and runs the full check, and review the codebase for anything inconsistent with the SPEC.

@@ -159,6 +159,7 @@ src/shellquest/
   playground.py     builds the playground (pure functions, takes a root path)
   progress.py       load/save progress.json
   checks.py         answer normalization helpers
+  mascot.py         Shelly the seashell: fixed phrases, ASCII art, on/off rules
   missions/
     __init__.py     Mission dataclass, registry, ordering
     basics.py  finding.py  reading.py  git.py
@@ -166,6 +167,8 @@ tests/
   conftest.py       fixture: SHELLQUEST_HOME → tmp_path, built playground
   test_playground.py   asserts every fixture fact above
   test_checks.py
+  test_progress.py
+  test_mascot.py
   test_missions.py     parametrized over all missions: the right answer passes,
                        a wrong answer fails; runs the reference command when its
                        tool is installed (skip otherwise)

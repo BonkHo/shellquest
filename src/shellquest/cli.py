@@ -242,15 +242,17 @@ def goto(
 @app.command()
 def reset(
     yes: Annotated[bool, typer.Option("--yes", help="Skip the confirmation prompt.")] = False,
-    progress: Annotated[bool, typer.Option("--progress", help="Also clear progress.")] = False,
+    clear_progress: Annotated[
+        bool, typer.Option("--progress", help="Also clear progress.")
+    ] = False,
 ) -> None:
     """Rebuild the playground. Asks for confirmation unless --yes."""
     root = playground.playground_home()
     if not yes:
-        lost = "your changes and progress" if progress else "your changes"
+        lost = "your changes and progress" if clear_progress else "your changes"
         typer.confirm(f"Rebuild {_display(root)}? All {lost} there will be lost.", abort=True)
     try:
-        playground.reset(root, clear_progress=progress)
+        playground.reset(root, clear_progress=clear_progress)
     except playground.PlaygroundError as err:
         _fail(str(err))
     _print_ready(root)
