@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-latest
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      # The mission tests run each reference command and skip it when its tool is missing.
+      - name: Install mission tools
+        run: brew install fd ripgrep jq bat eza fzf
+
+      # Fail loudly if an install broke, instead of letting those tests skip and stay green.
+      - name: Check the tools are on PATH
+        run: |
+          for tool in fd rg jq bat eza fzf; do
+            command -v "$tool" || { echo "missing: $tool"; exit 1; }
+          done
+
+      - run: uv sync --locked
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Lint
+        run: uv run ruff check .
+
+      # -rs lists why tests were skipped (expected: only find-4, which needs a zoxide shell).
+      - name: Tests
+        run: uv run pytest -rs
