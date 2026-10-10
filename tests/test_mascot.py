@@ -7,7 +7,8 @@ from typer.testing import CliRunner, Result
 from shellquest import mascot, missions
 from shellquest.cli import app
 
-SHELL_ART = r"`-.__.-'"  # the bottom of the shell, present in every mood
+SHELL_ART = r"`-.___.-'"  # the bottom of the shell, present in every mood
+SHELL_WIDTH = 13
 
 
 def run(*args: str) -> Result:
@@ -42,6 +43,19 @@ def test_render_draws_shell_and_bubble(mood: mascot.Mood) -> None:
     assert any(SHELL_ART in row for row in rows)
     assert mascot.FACES[mood] in "\n".join(rows)
     assert mascot.line_for(mood, "basics-1") in "\n".join(rows)  # short enough not to wrap
+
+
+@pytest.mark.parametrize("mood", mascot.MOODS)
+def test_shell_is_left_right_symmetrical(mood: mascot.Mood) -> None:
+    # Draw only the shell (the first 4 rows, the first 13 columns), with the face blanked out.
+    rows = [row[:SHELL_WIDTH].ljust(SHELL_WIDTH) for row in mascot.render(mood, "basics-1")[:4]]
+    # A ` on the left mirrors a ' on the right, and / mirrors \.
+    same_quote = str.maketrans("`", "'")
+    swap_slash = str.maketrans("/\\", "\\/")
+
+    for row in rows:
+        row = row.replace(mascot.FACES[mood], "   ").translate(same_quote)
+        assert row == row[::-1].translate(swap_slash), row
 
 
 @pytest.mark.parametrize("mood", mascot.MOODS)
