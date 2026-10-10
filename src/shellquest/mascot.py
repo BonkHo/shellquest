@@ -69,11 +69,12 @@ def line_for(mood: Mood, key: str) -> str:
 
 def render(mood: Mood, key: str) -> list[str]:
     """The shell with a speech bubble beside it, as lines of plain text."""
+    # Every row is 13 wide (an odd number), so the 3-character face sits exactly in the middle.
     shell = [
-        r"   _.--._   ",
-        r" .'\ || /'. ",
-        rf" \  {FACES[mood]}  / ",
-        r"  `-.__.-'  ",
+        r'   _.-"-._   ',
+        r" .'\  |  /'. ",
+        rf" \   {FACES[mood]}   / ",
+        r"  `-.___.-'  ",
     ]
     words = textwrap.wrap(line_for(mood, key), BUBBLE_WIDTH)
     width = max(len(word) for word in words)
